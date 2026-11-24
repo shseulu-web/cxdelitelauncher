@@ -1,0 +1,39 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install WiX Toolset
+        shell: powershell
+        run: choco install wixtoolset --no-progress -y
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.2.0'
+
+      - name: Build Windows installer
+        run: gradle jpackage
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: CxdEliteLauncher-Windows-EXE
+          path: build/jpackage/*.exe
+          if-no-files-found: error
+          retention-days: 14
