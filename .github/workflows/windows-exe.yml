@@ -1,15 +1,18 @@
-name: Build Windows EXE
+name: Build and Publish CxdElite Launcher
 
 on:
-  workflow_dispatch:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Check out source
+      - name: Checkout source
         uses: actions/checkout@v4
 
       - name: Set up Java 21
@@ -28,12 +31,38 @@ jobs:
           gradle-version: '9.2.0'
 
       - name: Build Windows installer
-        run: gradle jpackage
+        shell: powershell
+        run: |
+          gradle jpackage --no-daemon
+          $installer = Get-ChildItem -Path "build/jpackage" -Filter "*.exe" -File | Select-Object -First 1
+          if (-not $installer) {
+            Write-Error "No Windows .exe installer was generated in build/jpackage"
+            exit 1
+          }
+          $target = "build/jpackage/CxdEliteLauncher-Setup.exe"
+          if ($installer.FullName -ne (Resolve-Path "build/jpackage").Path + "\\" + $installer.Name) {
+            Copy-Item $installer.FullName $target -Force
+          } elseif ($installer.Name -ne "CxdEliteLauncher-Setup.exe") {
+            Rename-Item $installer.FullName "CxdEliteLauncher-Setup.exe" -Force
+          }
+          Get-Item $target | Format-List Name,Length,FullName
 
-      - name: Upload EXE
+      - name: Upload installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CxdEliteLauncher-Windows-EXE
-          path: build/jpackage/*.exe
+          name: CxdEliteLauncher-Setup
+          path: build/jpackage/CxdEliteLauncher-Setup.exe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
+
+      - name: Publish direct EXE download in GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-build-${{ github.run_number }}
+          name: CxdElite Launcher v0.1.0 (Build ${{ github.run_number }})
+          draft: false
+          prerelease: true
+          files: build/jpackage/CxdEliteLauncher-Setup.exe
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
